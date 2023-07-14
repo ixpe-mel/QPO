@@ -35,6 +35,41 @@ Pmin=((375/15)*E_lo)+1
 Pmax=(375/15)*E_hi
 
 
+def cleaner(filename,Pmin,Pmax,source_name_num):
+     with fits.open(str(filename)) as hdu:
+        data=hdu[1].data #loading in main data
+        # r cut 
+        r_sqrd=abs((data.field('X')-x_0)**2-(data.field('Y')-y_0)**2)    #r cut
+        index_r=[j<r_0 for j in r_sqrd]
+        data=data[index_r] #indexing photon dataset
+
+        #PI channel cut
+        index_energy=list(locate(data.field('PI'), lambda x: Pmin < x < Pmax))  #energy cut 
+        data=data[index_energy]
+        
+        fits.writeto(str(source_name_num)+'_clean_.fits',data,overwrite=True)
+
+
+# make sure to use in virtual environment (type ve into terminal)
+def concatenate_fits_files(file1, file2, output_file):
+    # Read the first table FITS file
+    table1 = Table.read(file1)
+    
+    # Read the second table FITS file
+    table2 = Table.read(file2)
+
+    # Concatenate the tables
+    concatenated_table =np.hstack([table1, table2])
+    
+    t = fits.BinTableHDU.from_columns(concatenated_table)
+    # Write the concatenated table to a new FITS file
+    with fits.open(file1) as hdu1:
+        prihdr = hdu1[1].header
+        prihdu = fits.PrimaryHDU(header=prihdr)
+        thdulist = fits.HDUList([prihdu, t])
+        thdulist.writeto(output_file, overwrite=True)
+
+
 
 def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length):
     
@@ -209,21 +244,8 @@ def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length):
         
     
 
-
-
-            
-           
-
-
-
-
-
-
-
-
-
-#make a master gti file
 def master_GTI(data1,data2,data3,source_name):
+    
     with fits.open(str(data1)) as hdu1:
         GTI1=list(hdu1[2].data)
         gtistart1=[item[0] for item in GTI1]
@@ -243,17 +265,42 @@ def master_GTI(data1,data2,data3,source_name):
         gtiend3=[item[1] for item in GTI3]
 
 
-    counter = 0
+    
+    
+    
+    
     beep=0
+    counter = 0
     i1 = 0 
     i2 = 0
     i3 = 0
     gtistart=[]
     gtiend=[]
-    while TSTOP1 - beep > 1e-6:
+    while TSTOP1 - beep > 1e-6:  #while the beep indexer isnt the end of the observation:
         
-        gtistart.append(max(gtistart1[i1], gtistart2[i2], gtistart3[i3]) ) #defining start and end of current master GTI
-        gtiend.append(min( gtiend1[i1],   gtiend2[i2],   gtiend3[i3] ))
+        gtistart.append(max(gtistart1[i1], gtistart2[i2], gtistart3[i3]) ) #defining start of current master GTI
+        
+        gtiend.append(0)
+        
+        gtiend[counter]=TSTOP1 #making the current index of gtiend equal to the end of obs (broken: 
+        
+        if( gtiend1[i1] > gtistart[counter]):
+            gtiend[counter]=( min( gtiend1[i1] , gtiend[counter] ))
+        else:
+            None
+        if( gtiend2[i2] > gtistart[counter] ):
+            gtiend[counter]=( min( gtiend2[i2] , gtiend[counter] ))
+        else:
+            None
+        if( gtiend3[i3] > gtistart[counter] ):
+            gtiend[counter]=( min( gtiend3[i3] , gtiend[counter] ))
+        else:
+            None
+    
+        
+        
+        
+        
         
         if gtiend1[i1] - gtiend[counter] < 1e-6:
             i1 = i1 + 1
@@ -271,15 +318,21 @@ def master_GTI(data1,data2,data3,source_name):
         beep=gtiend[counter]   
         counter=counter+1
         
+        
+    #return [gtistart,gtiend]
 
     master_gti=[list(x) for x in zip(gtistart,gtiend)]
     np.savetxt('Results/'+str(source_name)+'_gti.txt',master_gti)
     print(master_gti)
     
 
+            
+        
+
+
 #calculate normalised modulation angle
 
-def cal_eff_mod_angle(filename,datanumber):
+def cal_eff_mod_angle(filename,source_name_datanumber):
     with fits.open(str(filename)) as hdu:
         data=hdu[1].data
         q=data.field('q')
@@ -288,11 +341,11 @@ def cal_eff_mod_angle(filename,datanumber):
         u_renormalised=u/np.sqrt(q**2+u**2)
         atan2_vec=np.vectorize(math.atan2)
         eff_mod_angle=0.5 *atan2_vec(q_renormalised,u_renormalised)
-        np.savetxt('Results/eff_mod_angle'+str(datanumber)+'.txt',eff_mod_angle)
+        np.savetxt('Results/eff_mod_angle'+str(source_name_datanumber)+'.txt',eff_mod_angle)
 
         
 #calculate unnormalised modulation angle        
-def cal_eff_mod_angle_unnormalised(filename,datanumber):
+def cal_eff_mod_angle_unnormalised(filename,source_name_datanumber):
     with fits.open(str(filename)) as hdu:
         data=hdu[1].data
         q=data.field('q')
@@ -301,23 +354,19 @@ def cal_eff_mod_angle_unnormalised(filename,datanumber):
         #u_renormalised=u/np.sqrt(q**2+u**2)
         atan2_vec=np.vectorize(math.atan2)
         eff_mod_angle=0.5 *atan2_vec(q,u)
-        np.savetxt('Results/eff_mod_angle'+str(datanumber)+'.txt',eff_mod_angle)
+        np.savetxt('Results/eff_mod_angle'+str(source_name_datanumber)+'.txt',eff_mod_angle)
         
         
 
 
 #make a power spectrum
 
-def powerspectrum(data_file,gti,data_header,bin_length,seg_length):
+def powerspectrum(data_file,gti,bin_length,seg_length):
    #data
    
     
     GTI=list(np.loadtxt(str(gti)))
     #print(GTI)
-   
-    
-    
-       
     
     
     with fits.open(str(data_file)) as hdu:
@@ -367,7 +416,7 @@ def powerspectrum(data_file,gti,data_header,bin_length,seg_length):
 
 
 #making data ready to be lightcurved
-def cleaner_and_mod_angle_selector(filename_fits,filename,filename_eff,datanumber,Pmin,Pmax,mod_bin_num):
+def cleaner_and_mod_angle_selector(filename,filename_eff,source_name_datanumber,Pmin,Pmax,mod_bin_num):
     # Data
     with fits.open(str(filename)) as hdu:
         data=hdu[1].data #loading in main data
@@ -375,14 +424,14 @@ def cleaner_and_mod_angle_selector(filename_fits,filename,filename_eff,datanumbe
     eff_mod_angle=np.loadtxt(str(filename_eff)) #loading in mod angles of combined 
     
     # Header Data
-    with fits.open(str(filename_fits)) as hdu2:
-        data_header=hdu2[1].header 
-        TSTART=data_header['TSTART']
-        TSTOP=data_header['TSTOP']
-        MJDREFF=data_header['MJDREFF']   #defining the fits header data 
-        MJDREFI=data_header['MJDREFI']
-        MJD_ref_day=MJDREFF+MJDREFI
-        curve_duration=TSTOP-TSTART
+    #with fits.open(str(filename_fits)) as hdu2:
+    #    data_header=hdu2[1].header 
+    #    TSTART=data_header['TSTART']
+    #    TSTOP=data_header['TSTOP']
+    #    MJDREFF=data_header['MJDREFF']   #defining the fits header data 
+    #    MJDREFI=data_header['MJDREFI']
+    #    MJD_ref_day=MJDREFF+MJDREFI
+    #    curve_duration=TSTOP-TSTART
         
         # r cut 
         r_sqrd=abs((data.field('X')-x_0)**2-(data.field('Y')-y_0)**2)    #r cut just like before now i is each mod angle select fits file 
@@ -414,57 +463,68 @@ def cleaner_and_mod_angle_selector(filename_fits,filename,filename_eff,datanumbe
             index_mod_angle=[mod_min<=k<=mod_max for k in eff_mod_angle] #define the index over mod angle
             data_bin=data[index_mod_angle] #selecting/indexing the photons that meet the criteria of this mod angle range             
             #save cleaned and mod selected fits file
-            fits.writeto('Lightcurves/lc_'+str(datanumber)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_.fits',data_bin,overwrite=True)
+            fits.writeto('Lightcurves/lc_'+str(source_name_datanumber)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_.fits',data_bin,overwrite=True)
             
             
 
 #make a cross spectrum            
-def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax):
+def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax,clean):
     
     GTI=list(np.loadtxt(str(gti)))
     
     with fits.open(str(file12)) as hdu:
             data_12=hdu[1].data  #reading in DU1+DU2
+            print(data_12[0])
     
     with fits.open(str(file3)) as hdu2:
-            data_header=hdu2[1].header #reading in header 
+            #data_header=hdu2[1].header #reading in header 
             data_3=hdu2[1].data #reading in DU3
+            print(data_3[0])
+            
 
-            TSTART=data_header['TSTART']
-            TSTOP=data_header['TSTOP']
-            MJDREFF=data_header['MJDREFF']   #defining the fits header data from the raw fits file (since our combined cyg12 data doesnt have a header i dont think
-            MJDREFI=data_header['MJDREFI']
-            MJD_ref_day=MJDREFF+MJDREFI
-            curve_duration=TSTOP-TSTART
+            #TSTART=data_header['TSTART']
+            #TSTOP=data_header['TSTOP']
+            #MJDREFF=data_header['MJDREFF']   #defining the fits header data from the raw fits file (since our combined cyg12 data doesnt have a header i dont think
+            #MJDREFI=data_header['MJDREFI']
+            #MJD_ref_day=MJDREFF+MJDREFI
+            #curve_duration=TSTOP-TSTART
+            
+            if clean is not None:
+                print('oh no')
+                # r cut index
+                r_sqrd=abs((data_12.field('X')-x_0)**2-(data_12.field('Y')-y_0)**2)  #r cut just like before now i is each mod angle select fits file
+                r_sqrd_3=abs((data_3.field('X')-x_0)**2-(data_3.field('Y')-y_0)**2) 
+                index_r=[j<r_0 for j in r_sqrd]
+                index_r_3=[m<r_0 for m in r_sqrd_3]
+                data_12=data_12[index_r] #indexing photon dataset
+                data_3=data_3[index_r_3]
+                #eff_mod_angle_12=eff_mod_angle_12[index_r] #indexing mod angle dataset
 
-            # r cut index
-            r_sqrd=abs((data_12.field('X')-x_0)**2-(data_12.field('Y')-y_0)**2)  #r cut just like before now i is each mod angle select fits file
-            r_sqrd_3=abs((data_3.field('X')-x_0)**2-(data_3.field('Y')-y_0)**2) 
-            index_r=[j<r_0 for j in r_sqrd]
-            index_r_3=[m<r_0 for m in r_sqrd_3]
-            data_12=data_12[index_r] #indexing photon dataset
-            data_3=data_3[index_r_3]
-            #eff_mod_angle_12=eff_mod_angle_12[index_r] #indexing mod angle dataset
 
+                #PI channel/energy index
+                index_energy=list(locate(data_12.field('PI'), lambda x: Pmin < x < Pmax))  #energy cut just like before
+                data_12=data_12[index_energy]
+                index_energy_3=list(locate(data_3.field('PI'), lambda x: Pmin < x < Pmax))
+                data_3=data_3[index_energy_3]
+                #eff_mod_angle_12=eff_mod_angle_12[index_energy]
 
-            #PI channel/energy index
-            index_energy=list(locate(data_12.field('PI'), lambda x: Pmin < x < Pmax))  #energy cut just like before
-            data_12=data_12[index_energy]
-            index_energy_3=list(locate(data_3.field('PI'), lambda x: Pmin < x < Pmax))
-            data_3=data_3[index_energy_3]
-            #eff_mod_angle_12=eff_mod_angle_12[index_energy]
-
+            else:
+                pass
 
             TIME=data_12.field('TIME')
             TIME_3=data_3.field('TIME')
 
             #Lightcurve
 
-            lightcurve_12=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
+            lightcurve_12=Lightcurve.make_lightcurve(TIME,dt=bin_length,gti=GTI)
             lightcurve_12.apply_gtis()
+            print('lc')
 
-            lightcurve_3=Lightcurve.make_lightcurve(TIME_3,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
+            lightcurve_3=Lightcurve.make_lightcurve(TIME_3,dt=bin_length,gti=GTI)
             lightcurve_3.apply_gtis()
+            print('lc_3')
+            
+            
 
             #Cross spec 
 
@@ -475,7 +535,7 @@ def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax):
 
             fig, ax1 = plt.subplots(1,1,figsize=(9,6))
                 #ax1.plot(cs.freq, cs.power, color='blue',label='no log rebin')
-            ax1.plot(avg_cs.freq, avg_cs.power.real*avg_cs.freq, color='green')
+            ax1.plot(avg_cs.freq, avg_cs.power.real*avg_cs.freq,'.', color='green')
                 #ax1.plot(avg_ps_log.freq, avg_ps_log.power, color='red',label='log rebin')
             ax1.set_xlabel("Frequency (Hz)")
             ax1.set_title('Cross spec')
@@ -495,7 +555,7 @@ def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax):
 
 
             
-def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3,gti):
+def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3,gti):
     
     av_power_array=[]
     av_power_array_real=[]
@@ -558,7 +618,7 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
        
      
             norm_power_real=avg_cs.power.real  #cross spec properties
-            print(norm_power_real)
+            #print(norm_power_real)
             norm_power_im=avg_cs.power.imag
             norm_freq=avg_cs.freq
           
@@ -572,7 +632,7 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
       
             av_power_norm=selected_rows_norm['all_power'].mean() #calculating mean pwr
             av_power_norm_array.append(av_power_norm)
-            np.savetxt('Results/allmod_av_real_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_norm_array)
+            np.savetxt('Results/allmod_av_real_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_norm_array)
             
             #im
             norm_d_im = {'all_power_im': np.array(norm_power_im), 'all_fourier_freq': np.array(norm_freq)} #total pwr and freq in dataset
@@ -581,19 +641,19 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
       
             av_power_norm_im=selected_rows_norm_im['all_power_im'].mean() #calculating mean pwr
             av_power_im_norm_array.append(av_power_norm_im)
-            np.savetxt('Results/allmod_av_im_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_im_norm_array)
+            np.savetxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_im_norm_array)
 
 
 
             #calculating standard error on the mean
             sem_real_norm=np.std(selected_rows_norm['all_power'], ddof=1) / np.sqrt((np.size(selected_rows_norm['all_power'])))
             err_array_norm_real.append(sem_real_norm)
-            np.savetxt('Results/allmod_av_real_err_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_real) #one of these comes out for every run
+            np.savetxt('Results/allmod_av_real_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_real) #one of these comes out for every run
              
 
             sem_im_norm=np.std(selected_rows_norm_im['all_power_im'], ddof=1) / np.sqrt((np.size(selected_rows_norm_im['all_power_im'])))
             err_array_norm_im.append(sem_im_norm)
-            np.savetxt('Results/allmod_av_im_err_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_im) #one of these comes out for every run
+            np.savetxt('Results/allmod_av_im_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_im) #one of these comes out for every run
              
 
 
@@ -605,7 +665,7 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
             #calculating normalisation constant
             norm_factor=(np.sqrt((fmax-fmin))/np.sqrt(av_power_norm))
             norm_factor_array.append(norm_factor) 
-            np.savetxt('Results/norm_cs_'+'freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',norm_factor_array)
+            np.savetxt('Results/norm_cs_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',norm_factor_array)
 
             #make reference lightcurve
             TIME_ref=data_3['TIME']   #defining the ref lightcurve data
@@ -625,7 +685,7 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
         mod_min=i[0]
         mod_max=i[1]
      
-        for file_12 in glob.iglob('Lightcurves/lc_12_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name  
+        for file_12 in glob.iglob('Lightcurves/lc_12_'+str(source_name)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name  
 
             with fits.open(file_12) as hdu1:
                 data_cut=hdu1[1].data  #reading in each mod angle selected file
@@ -690,12 +750,12 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
                 selected_rows_real = df_real[(df_real['fourier_freq'] >= fmin) & (df_real['fourier_freq'] <= fmax)]
                 av_power_real=selected_rows_real['real_power'].mean()
                 av_power_array_real.append(av_power_real)
-                np.savetxt('Results/G_av_real_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_real)
+                np.savetxt('Results/G_av_real_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_real)
                
                 #Standard error on the average real power
                 sem_real=np.std(selected_rows_real['real_power'], ddof=1) / np.sqrt((np.size(selected_rows_real['real_power'])))
                 err_array_real.append(sem_real)
-                np.savetxt('Results/G_av_real_err_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_real) #one of these comes out for every run
+                np.savetxt('Results/G_av_real_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_real) #one of these comes out for every run
              
 
                 #Average imaginary power over frequency
@@ -704,13 +764,13 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
                 selected_rows_im = df_im[(df_im['fourier_freq'] >= fmin) & (df_im['fourier_freq'] <= fmax)]
                 av_power_im=selected_rows_im['im_power'].mean()
                 av_power_array_im.append(av_power_im)
-                np.savetxt('Results/G_av_im_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_im)
+                np.savetxt('Results/G_av_im_'+str(source_name)+'_'str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_im)
             
 
                 #Standard error on the average imaginary power
                 sem_im=np.std(selected_rows_im['im_power'], ddof=1) / np.sqrt((np.size(selected_rows_im['im_power'])))
                 err_array_im.append(sem_im)
-                np.savetxt('Results/G_av_im_err_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_im) #one of these comes out for every run
+                np.savetxt('Results/G_av_im_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_im) #one of these comes out for every run
                 
                 
                 
@@ -719,9 +779,8 @@ def G_norm(bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3
         #np.savetxt('norm_cs_'+str(mod_bin_number)+'_bins_'+'freqs_'+str(fmin)+str(fmax)+'.txt',norm_factor)        
                 
                 
-  #_norm(lc_dir_prompt,ref_curve_data,bin_length,seg_length,Pmin,Pmax,cs_name,fmin,fmax,mod_minimum,mod_maximum,mod_bin_number,norm,norm12,norm3):              
-                
-def mod_angle_cross_spec_ith(header_file,gti,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number):
+
+def mod_angle_cross_spec_ith(gti,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number):
    
     #power arrays
     av_power_array_real=[]
@@ -739,26 +798,26 @@ def mod_angle_cross_spec_ith(header_file,gti,bin_length,seg_length,Pmin,Pmax,fmi
     aspace=np.linspace(mod_minimum,mod_maximum,mod_bin_number+1)
     mod_angle_list=[(aspace[i-1],aspace[i]) for i in range(len(aspace))]  #making a list of mod angle bins to select over
     mod_angle_list.pop(0) #removing the dodger first one
-    print('mod list made')    
-    with fits.open(header_file) as hduh:
-        data_header=hduh[1].header
-        TSTART=data_header['TSTART']
-        TSTOP=data_header['TSTOP']
-        MJDREFF=data_header['MJDREFF']   #defining the modulation angle selected fits data
-        MJDREFI=data_header['MJDREFI']
-        MJD_ref_day=MJDREFF+MJDREFI
-        curve_duration=TSTOP-TSTART
-        print('header read in')
+  #  print('mod list made')    
+  #  with fits.open(header_file) as hduh:
+  #      data_header=hduh[1].header
+  #      TSTART=data_header['TSTART']
+  #      TSTOP=data_header['TSTOP']
+  #      MJDREFF=data_header['MJDREFF']   #defining the modulation angle selected fits data
+  #      MJDREFI=data_header['MJDREFI']
+  #      MJD_ref_day=MJDREFF+MJDREFI
+  #      curve_duration=TSTOP-TSTART
+  #      print('header read in')
     for i in mod_angle_list:
         mod_min=i[0]
         mod_max=i[1]
        
-        for file_12 in glob.iglob('Lightcurves/lc_12_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name
+        for file_12 in glob.iglob('Lightcurves/lc_12_'+str(source_name)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name
             with fits.open(file_12) as hdu1:
                 data_12=hdu1[1].data
                # print(data_12)
           
-        for ref_curve_data in glob.iglob('Lightcurves/lc_3_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): 
+        for ref_curve_data in glob.iglob('Lightcurves/lc_3_'+str(source_name)+'_'str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): 
             with fits.open(str(ref_curve_data)) as hdu2:
                 data_ref=hdu2[1].data
          
@@ -767,12 +826,12 @@ def mod_angle_cross_spec_ith(header_file,gti,bin_length,seg_length,Pmin,Pmax,fmi
                 TIME_ref=data_ref['TIME']   #defining the ref lightcurve data
                    
                 #12 lightcurve
-                lc=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,mjdref=MJD_ref_day,gti=GTI)
+                lc=Lightcurve.make_lightcurve(TIME,dt=bin_length,gti=GTI)
                 lc.apply_gtis()
                 print(lc.counts)           
 
                 #3 lightcurve (ref)
-                lc_ref=Lightcurve.make_lightcurve(TIME_ref,dt=bin_length,tseg=curve_duration,tstart=TSTART,mjdref=MJD_ref_day,gti=GTI)
+                lc_ref=Lightcurve.make_lightcurve(TIME_ref,dt=bin_length,gti=GTI)
                 lc_ref.apply_gtis()
                 
                 #ith to ith cross spectrum
@@ -806,12 +865,12 @@ def mod_angle_cross_spec_ith(header_file,gti,bin_length,seg_length,Pmin,Pmax,fmi
                 selected_rows_real = df_real[(df_real['fourier_freq'] >= fmin) & (df_real['fourier_freq'] <= fmax)]
                 av_power_real=selected_rows_real['power_real'].mean()
                 av_power_array_real.append(av_power_real)
-                np.savetxt('Results/cs_ith_av_real'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_real)
+                np.savetxt('Results/cs_ith_av_real_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_real)
                
                 #errors on real part
                 sem_real=np.std(selected_rows_real['power_real'], ddof=1) / np.sqrt((np.size(selected_rows_real['power_real'])))
                 err_array_real.append(sem_real)
-                np.savetxt('Results/cs_ith_av_real_err'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_real)
+                np.savetxt('Results/cs_ith_av_real_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_real)
         
         
         
@@ -821,12 +880,12 @@ def mod_angle_cross_spec_ith(header_file,gti,bin_length,seg_length,Pmin,Pmax,fmi
                 selected_rows_im = df_im[(df_im['fourier_freq'] >= fmin) & (df_im['fourier_freq'] <= fmax)]
                 av_power_im=selected_rows_im['power_im'].mean()
                 av_power_array_im.append(av_power_im)
-                np.savetxt('Results/cs_ith_av_im_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_im)
+                np.savetxt('Results/cs_ith_av_im_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_im)
 
                 #errors on im part
                 sem_im=np.std(selected_rows_im['power_im'], ddof=1) / np.sqrt((np.size(selected_rows_im['power_im'])))
                 err_array_im.append(sem_im)
-                np.savetxt('Results/cs_ith_av_im_err'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_im)
+                np.savetxt('Results/cs_ith_av_im_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_im)
                 
 
                 
@@ -852,32 +911,32 @@ def results(mod_bin_number,fmin,fmax,bin_length,seg_length):
 
     #-------------------------------------------------------------------------------------
 
-    normalisation_factor=np.loadtxt('Results/norm_cs_'+'freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    normalisation_factor=np.loadtxt('Results/norm_cs_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
 
     norm_factor_list=[np.sqrt(1/(normalisation_factor**2))]*len(av_mod)
     #123each
 #Results/cs_ith_av_real'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.t
-    each_real=np.loadtxt('Results/cs_ith_av_real'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    each_im=np.loadtxt('Results/cs_ith_av_im_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    each_real=np.loadtxt('Results/cs_ith_av_real_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    each_im=np.loadtxt('Results/cs_ith_av_im_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
   
-    eacherr_power_real=np.loadtxt('Results/cs_ith_av_real_err'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    eacherr_power_im=np.loadtxt('Results/cs_ith_av_im_err'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+ eacherr_power_real=np.loadtxt('Results/cs_ith_av_real_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    eacherr_power_im=np.loadtxt('Results/cs_ith_av_im_err_'+str(source_name)+'_'str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
     
     #123all
-    all_im=np.loadtxt('Results/allmod_av_im_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    all_real=np.loadtxt('Results/allmod_av_real_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    all_im=np.loadtxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    all_real=np.loadtxt('Results/allmod_av_real_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
-    all_im_err=np.loadtxt('Results/allmod_av_im_err_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    all_real_err=np.loadtxt('Results/allmod_av_real_err_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    all_im_err=np.loadtxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    all_real_err=np.loadtxt('Results/allmod_av_real_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
    
 
     #G
-    newG_im=np.loadtxt('Results/G_av_im_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_real=np.loadtxt('Results/G_av_real_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_im=np.loadtxt('Results/G_av_im_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_real=np.loadtxt('Results/G_av_real_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
-    newG_err_im=np.loadtxt('Results/G_av_im_err_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_err_real=np.loadtxt('Results/G_av_real_err_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_im=np.loadtxt('Results/G_av_im_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_real=np.loadtxt('Results/G_av_real_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
   
 
 
@@ -940,25 +999,25 @@ def combo_results(bins1,bins2,bins3,fmin,fmax,bin_length,seg_length):
 
 
     #G1
-    newG_im=np.loadtxt('Results/G_av_im_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_real=np.loadtxt('Results/G_av_real_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_im=np.loadtxt('Results/G_av_im_'+str(source_name)+'_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_real=np.loadtxt('Results/G_av_real_'+str(source_name)+'_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
-    newG_err_im=np.loadtxt('Results/G_av_im_err_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_err_real=np.loadtxt('Results/G_av_real_err_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_im=np.loadtxt('Results/G_av_im_err_'+str(source_name)+'_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_real=np.loadtxt('Results/G_av_real_err_'+str(source_name)+'_'+str(bins1)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
   
     #G2
-    newG_im_2=np.loadtxt('Results/G_av_im_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_real_2=np.loadtxt('Results/G_av_real_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_im_2=np.loadtxt('Results/G_av_im_'+str(source_name)+'_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_real_2=np.loadtxt('Results/G_av_real_'+str(source_name)+'_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
-    newG_err_im_2=np.loadtxt('Results/G_av_im_err_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_err_real_2=np.loadtxt('Results/G_av_real_err_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_im_2=np.loadtxt('Results/G_av_im_err_'+str(source_name)+'_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_real_2=np.loadtxt('Results/G_av_real_err_'+str(source_name)+'_'+str(bins2)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
     #G3
-    newG_im_3=np.loadtxt('Results/G_av_im_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_real_3=np.loadtxt('Results/G_av_real_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_im_3=np.loadtxt('Results/G_av_im_'+str(source_name)+'_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_real_3=np.loadtxt('Results/G_av_real_'+str(source_name)+'_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
-    newG_err_im_3=np.loadtxt('Results/G_av_im_err_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    newG_err_real_3=np.loadtxt('Results/G_av_real_err_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_im_3=np.loadtxt('Results/G_av_im_err_'+str(source_name)+'_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    newG_err_real_3=np.loadtxt('Results/G_av_real_err_'+str(source_name)+'_'+str(bins3)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
 
 
 
