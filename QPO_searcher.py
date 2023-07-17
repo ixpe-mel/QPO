@@ -421,7 +421,7 @@ def cleaner_and_mod_angle_selector(filename,filename_eff,source_name_datanumber,
     with fits.open(str(filename)) as hdu:
         data=hdu[1].data #loading in main data
        # print('Initial number of data {}'.format(len(data)))
-    eff_mod_angle=np.loadtxt(str(filename_eff)) #loading in mod angles of combined 
+        eff_mod_angle=np.loadtxt(str(filename_eff)) #loading in mod angles of combined 
     
     # Header Data
     #with fits.open(str(filename_fits)) as hdu2:
@@ -764,7 +764,7 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
                 selected_rows_im = df_im[(df_im['fourier_freq'] >= fmin) & (df_im['fourier_freq'] <= fmax)]
                 av_power_im=selected_rows_im['im_power'].mean()
                 av_power_array_im.append(av_power_im)
-                np.savetxt('Results/G_av_im_'+str(source_name)+'_'str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_im)
+                np.savetxt('Results/G_av_im_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_array_im)
             
 
                 #Standard error on the average imaginary power
@@ -817,7 +817,7 @@ def mod_angle_cross_spec_ith(gti,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_b
                 data_12=hdu1[1].data
                # print(data_12)
           
-        for ref_curve_data in glob.iglob('Lightcurves/lc_3_'+str(source_name)+'_'str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): 
+        for ref_curve_data in glob.iglob('Lightcurves/lc_3_'+str(source_name)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): 
             with fits.open(str(ref_curve_data)) as hdu2:
                 data_ref=hdu2[1].data
          
@@ -919,8 +919,8 @@ def results(mod_bin_number,fmin,fmax,bin_length,seg_length):
     each_real=np.loadtxt('Results/cs_ith_av_real_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     each_im=np.loadtxt('Results/cs_ith_av_im_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
   
- eacherr_power_real=np.loadtxt('Results/cs_ith_av_real_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    eacherr_power_im=np.loadtxt('Results/cs_ith_av_im_err_'+str(source_name)+'_'str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    eacherr_power_real=np.loadtxt('Results/cs_ith_av_real_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+    eacherr_power_im=np.loadtxt('Results/cs_ith_av_im_err_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
     
     #123all
