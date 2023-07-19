@@ -578,13 +578,12 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
             
             TSTART=data_header['TSTART']
             TSTOP=data_header['TSTOP']
-            MJDREFF=data_header['MJDREFF']   #defining the fits header data from the raw fits file (since our combined cyg12 data doesnt have a header i dont think
-            MJDREFI=data_header['MJDREFI']
-            MJD_ref_day=MJDREFF+MJDREFI
+            MJDREFF=data_header['MJDREFF']   #defining the fits header data from the raw fits file 
+            #MJD_ref_day=MJDREFF+MJDREFI
             curve_duration=TSTOP-TSTART                  
 
             # r cut index
-            r_sqrd=abs((data_12.field('X')-x_0)**2-(data_12.field('Y')-y_0)**2)  #r cut just like before now i is each mod angle select fits file
+            r_sqrd=abs((data_12.field('X')-x_0)**2-(data_12.field('Y')-y_0)**2)  #r cut 
             r_sqrd_3=abs((data_3.field('X')-x_0)**2-(data_3.field('Y')-y_0)**2) 
             index_r=[j<r_0 for j in r_sqrd]
             index_r_3=[m<r_0 for m in r_sqrd_3]
@@ -615,61 +614,65 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
             #Cross spec for norm
 
             avg_cs = AveragedCrossspectrum.from_lightcurve(lightcurve_12,lightcurve_3,seg_length,norm='frac')
-       
+               
+            
      
-            norm_power_real=avg_cs.power.real  #cross spec properties
+    #        norm_power_real=avg_cs.power.real  #cross spec properties
             #print(norm_power_real)
-            norm_power_im=avg_cs.power.imag
-            norm_freq=avg_cs.freq
-          
-            av_power_norm_array=[]    
-            av_power_im_norm_array=[]
-            #make a pandas dataframe for  power and frequency
+   #         norm_power_im=avg_cs.power.imag
+   #         norm_freq=avg_cs.freq
+   #           
+   #          av_power_norm_array=[]    
+   #         av_power_im_norm_array=[]
+             ##make a pandas dataframe for  power and frequency
             #real
-            norm_d = {'all_power': np.array(norm_power_real), 'all_fourier_freq': np.array(norm_freq)} #total pwr and freq in dataset
+            norm_d = {'all_power': np.array(abs(avg_cs.power)), 'all_fourier_freq': np.array(norm_freq)} #total pwr and freq in dataset
             df_norm = pd.DataFrame(data=norm_d)
             selected_rows_norm = df_norm[(df_norm['all_fourier_freq'] >= fmin) & (df_norm['all_fourier_freq'] <= fmax)] #selecting freq range
       
             av_power_norm=selected_rows_norm['all_power'].mean() #calculating mean pwr
             av_power_norm_array.append(av_power_norm)
-            np.savetxt('Results/allmod_av_real_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_norm_array)
+          #
+          #np.savetxt('Results/allmod_av_real_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_norm_array)
             
             #im
-            norm_d_im = {'all_power_im': np.array(norm_power_im), 'all_fourier_freq': np.array(norm_freq)} #total pwr and freq in dataset
-            df_norm_im = pd.DataFrame(data=norm_d_im)
-            selected_rows_norm_im = df_norm_im[(df_norm_im['all_fourier_freq'] >= fmin) & (df_norm_im['all_fourier_freq'] <= fmax)] #selecting freq range
+         #   norm_d_im = {'all_power_im': np.array(norm_power_im), 'all_fourier_freq': np.array(norm_freq)} #total pwr and freq in dataset
+         #   df_norm_im = pd.DataFrame(data=norm_d_im)
+         #   selected_rows_norm_im = df_norm_im[(df_norm_im['all_fourier_freq'] >= fmin) & (df_norm_im['all_fourier_freq'] <= fmax)] #selecting freq range
       
-            av_power_norm_im=selected_rows_norm_im['all_power_im'].mean() #calculating mean pwr
-            av_power_im_norm_array.append(av_power_norm_im)
-            np.savetxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_im_norm_array)
+         #   av_power_norm_im=selected_rows_norm_im['all_power_im'].mean() #calculating mean pwr
+         #   av_power_im_norm_array.append(av_power_norm_im)
+         #   np.savetxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',av_power_im_norm_array)
 
 
 
             #calculating standard error on the mean
-            sem_real_norm=np.std(selected_rows_norm['all_power'], ddof=1) / np.sqrt((np.size(selected_rows_norm['all_power'])))
-            err_array_norm_real.append(sem_real_norm)
-            np.savetxt('Results/allmod_av_real_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_real) #one of these comes out for every run
+        #    sem_real_norm=np.std(selected_rows_norm['all_power'], ddof=1) / np.sqrt((np.size(selected_rows_norm['all_power'])))
+        #   err_array_norm_real.append(sem_real_norm)
+         #   np.savetxt('Results/allmod_av_real_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_real) #one of these comes out for every run
              
 
-            sem_im_norm=np.std(selected_rows_norm_im['all_power_im'], ddof=1) / np.sqrt((np.size(selected_rows_norm_im['all_power_im'])))
-            err_array_norm_im.append(sem_im_norm)
-            np.savetxt('Results/allmod_av_im_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_im) #one of these comes out for every run
+       #     sem_im_norm=np.std(selected_rows_norm_im['all_power_im'], ddof=1) / np.sqrt((np.size(selected_rows_norm_im['all_power_im'])))
+       #     err_array_norm_im.append(sem_im_norm)
+       #     np.savetxt('Results/allmod_av_im_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',err_array_norm_im) #one of these comes out for every run
              
 
 
-
+            #print(av_power_norm)
+            #print(abs(av_power_norm))
 
 
 
 
             #calculating normalisation constant
+            
             norm_factor=(np.sqrt((fmax-fmin))/np.sqrt(av_power_norm))
             norm_factor_array.append(norm_factor) 
             np.savetxt('Results/norm_cs_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',norm_factor_array)
 
             #make reference lightcurve
             TIME_ref=data_3['TIME']   #defining the ref lightcurve data
-            lc_ref=Lightcurve.make_lightcurve(TIME_ref,dt=bin_length,tseg=curve_duration,tstart=TSTART,mjdref=MJD_ref_day,gti=GTI)
+            lc_ref=Lightcurve.make_lightcurve(TIME_ref,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
             lc_ref.apply_gtis()
            
             #making a list of mod angle bins to select over
@@ -685,14 +688,14 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
         mod_min=i[0]
         mod_max=i[1]
      
-        for file_12 in glob.iglob('Lightcurves/lc_12_'+str(source_name)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name  
+        for file_12 in glob.iglob('Lightcurves/lc_'+str(source_name)+'_12_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name  
 
             with fits.open(file_12) as hdu1:
                 data_cut=hdu1[1].data  #reading in each mod angle selected file
                 TIME=data_cut['TIME']
                 
                 #making subject lightcurve
-                lc=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,mjdref=MJD_ref_day,gti=GTI)
+                lc=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
                 lc.apply_gtis()
                
                 #making averagd cross spectrum
@@ -780,7 +783,7 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
                 
                 
 
-def mod_angle_cross_spec_ith(gti,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number):
+def mod_angle_cross_spec_ith(source_name,gti,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number):
    
     #power arrays
     av_power_array_real=[]
@@ -812,12 +815,12 @@ def mod_angle_cross_spec_ith(gti,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_b
         mod_min=i[0]
         mod_max=i[1]
        
-        for file_12 in glob.iglob('Lightcurves/lc_12_'+str(source_name)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name
+        for file_12 in glob.iglob('Lightcurves/lc_'+str(source_name)+'_12_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name
             with fits.open(file_12) as hdu1:
                 data_12=hdu1[1].data
                # print(data_12)
           
-        for ref_curve_data in glob.iglob('Lightcurves/lc_3_'+str(source_name)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): 
+        for ref_curve_data in glob.iglob('Lightcurves/lc_'+str(source_name)+'_3_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): 
             with fits.open(str(ref_curve_data)) as hdu2:
                 data_ref=hdu2[1].data
          
@@ -889,7 +892,7 @@ def mod_angle_cross_spec_ith(gti,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_b
                 
 
                 
-def results(mod_bin_number,fmin,fmax,bin_length,seg_length):
+def results(source_name,mod_bin_number,fmin,fmax,bin_length,seg_length):
 
     #mod_min=np.radians(-90)
     #print(mod_min)
@@ -924,11 +927,11 @@ def results(mod_bin_number,fmin,fmax,bin_length,seg_length):
     
     
     #123all
-    all_im=np.loadtxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    all_real=np.loadtxt('Results/allmod_av_real_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+   # all_im=np.loadtxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+   # all_real=np.loadtxt('Results/allmod_av_real_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
     
-    all_im_err=np.loadtxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
-    all_real_err=np.loadtxt('Results/allmod_av_real_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+   # all_im_err=np.loadtxt('Results/allmod_av_im_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
+   # all_real_err=np.loadtxt('Results/allmod_av_real_err_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
    
 
     #G
