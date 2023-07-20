@@ -550,9 +550,6 @@ def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax,clean):
                 ax1.spines[axis].set_linewidth(1.5)
                 plt.show()
 
-        
-
-
 
             
 def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3,gti):
