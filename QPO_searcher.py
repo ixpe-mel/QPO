@@ -16,7 +16,7 @@ import math
 import stingray
 import lightcurve
 from stingray import Lightcurve
-from stingray import Powerspectrum
+#from stingray import Powerspectrum
 from stingray import AveragedPowerspectrum
 from stingray import Crossspectrum
 from stingray.exceptions import StingrayError
@@ -33,6 +33,556 @@ E_lo=2
 E_hi=8
 Pmin=((375/15)*E_lo)+1
 Pmax=(375/15)*E_hi
+
+
+
+
+def frac_rms_err_modbins(det12,det3,gti,Pmin,Pmax,bin_length,seg_length,fmin,fmax,mod_bin_num,eff_12,eff_3):
+    eff_12=np.loadtxt(str(eff_12))
+    eff_3=np.loadtxt(str(eff_3))
+    GTI=list(np.loadtxt(str(gti)))
+    frac_rms=[]
+    phase=[]
+    frac_rms_err_arr=[]
+    phase_err_arr=[]
+    with fits.open(str(det12)) as hdu:
+
+        data_main=hdu[1].data  #reading in the file we will use the main data of (ie stokes, PI channel etc)
+        #print('Initial number of data {}'.format(len(data_main)))
+    with fits.open(str(det3)) as hdu1:
+        data_ref=hdu1[1].data  #reading in the file we will use the main
+        data_header=hdu1[1].header #reading in the file we will use the header of (the header data we need here is the same for all raw fits so any will do)
+        
+        
+        
+        
+
+        #indexing on energy and r
+        r_sqrd_1=abs((data_main.field('X')-x_0)**2-(data_main.field('Y')-y_0)**2)    #r cut just like before
+        r_sqrd_3=abs((data_ref.field('X')-x_0)**2-(data_ref.field('Y')-y_0)**2)
+        r_0=30.769326
+        index_r_1=[u<r_0 for u in r_sqrd_1]
+        index_r_3=[r3<r_0 for r3 in r_sqrd_3]
+        
+        data_main=data_main[index_r_1]
+        data_ref=data_ref[index_r_3]
+        eff_12=eff_12[index_r_1]
+        eff_3=eff_3[index_r_3]
+
+
+        index_energy_1=list(locate(data_main['PI'], lambda x: Pmin < x < Pmax))  #energy cut just like before
+        index_energy_3=list(locate(data_ref['PI'], lambda x: Pmin < x < Pmax))  #energy cut just like before
+        
+        
+        
+        
+        
+        data_main_total_obs=data_main[index_energy_1]
+        data_ref_total_obs=data_ref[index_energy_3]    #useable photons (before gtis) to index over 
+        eff_12=eff_12[index_energy_1]
+        eff_3=eff_3[index_energy_3]
+        #-----------------------------------------------------------------------------cleaning complete
+
+        
+        #Defining fits header info
+        
+        TSTART=data_header['TSTART']
+        TSTOP=data_header['TSTOP']
+        MJDREFF=data_header['MJDREFF']   
+        MJDREFI=data_header['MJDREFI']
+        MJD_ref_day=MJDREFF+MJDREFI
+        curve_duration=TSTOP-TSTART
+#------------------------------------------------------------------------------------- This bit will always stay the same!
+
+        
+        #making time list based on length of bin to index on
+
+        time_bin_number=int((TSTOP-TSTART)//seg_length)  #needs to be an integer so round down to 'remove' the short timebin before its made
+        #print(time_bin_number)
+        #time_bin_number=2**18
+        time_space=np.linspace(TSTART,TSTOP,time_bin_number)
+        seg_time_list=[(time_space[w-1],time_space[w]) for w in range(len(time_space))] 
+        seg_time_list.pop(0)  
+        #print((seg_time_list))
+        
+        #testing the time intervals on GTI values
+        
+        gti_segs=[]
+        for time_value in seg_time_list:
+            
+            time_min_val=time_value[0]
+            time_max_val=time_value[1]
+            #print(time_min_val)
+            #print(time_max_val)
+            for j in GTI:
+                #print(j[0])
+                #print(j[1])
+                if time_min_val>j[0] and time_max_val<j[1]:
+                    gti_segs.append(time_value)
+
+        
+        
+        #Modulation Angle List
+        mod_min_global=np.radians(-90)
+        mod_max_global=np.radians(90)
+
+        a=np.linspace(mod_min_global,mod_max_global,mod_bin_num+1) #defining even space between min and max for (mod_bin_num) list
+        mod_angle_list=[(a[i-1],a[i]) for i in range(len(a))]  #making a list of mod angle bins to select over
+        mod_angle_list.pop(0) #removing the dodger first one
+             
+        av_mod=[np.mean(i) for i in mod_angle_list]
+        #for each [min,max] in the mod angle list, only the the angles between these vals are selected and the same index is applied to the data
+        
+        for i in mod_angle_list:
+            mod_min=i[0] #defining lhs bin edge
+            mod_max=i[1] #defining rhs bin edge
+            index_mod_angle_12=[mod_min<=k<=mod_max for k in eff_12] #define the index over mod angle
+            index_mod_angle_3=[mod_min<=k<=mod_max for k in eff_3]
+            data_bin_12=data_main_total_obs[index_mod_angle_12] #selecting/indexing the photons that meet the criteria of this mod angle range             
+            data_bin_3=data_ref_total_obs[index_mod_angle_3]
+            
+            #save cleaned and mod selected fits file
+        
+        
+
+            real=[]
+            im=[]
+
+            #print(len(gti_segs))   
+            for good_seg in gti_segs:
+
+                time_min=good_seg[0]
+                time_max=good_seg[1]
+
+                time_index_1=[time_min<photon_time_1<time_max for photon_time_1 in data_bin_12['TIME']]
+                time_index_3=[time_min<photon_time_3<time_max for photon_time_3 in data_bin_3['TIME']]
+                #print(len(data_main))
+
+                data_main_time_bin=data_bin_12[time_index_1]
+                data_ref_time_bin=data_bin_3[time_index_3]
+
+
+
+               #making lightcurves binned over mod angle (also time)
+
+
+                lc_12=Lightcurve.make_lightcurve(data_main_time_bin['TIME'],dt=bin_length,tseg=time_max-time_min,tstart=time_min)#,gti=GTI) 
+                lc_3=Lightcurve.make_lightcurve(data_ref_time_bin['TIME'],dt=bin_length,tseg=time_max-time_min,tstart=time_min)#),gti=GTI)
+                
+                
+
+                #print(lc_12.n)
+                #print(lc_3.n)
+                
+              #  plt.figure()
+              #  plt.plot(lc_12.time,lc_12.counts,label='12')
+                
+             #   plt.plot(lc_3.time,lc_3.counts,label='3')
+             #   plt.show()
+                lc_12_zero=not np.any(lc_12.counts)
+                print(lc_12_zero)
+                lc_3_zero=not np.any(lc_3.counts)
+                print(lc_3_zero)
+                #print(type(lc_12.counts))
+                #print(lc_3.counts)
+            
+        
+        
+        
+        
+        
+                if lc_12_zero==False and lc_3_zero==False:
+                    
+                    cs=Crossspectrum.from_lightcurve(lc_12,lc_3,norm='frac') #making averagd cross spec
+                    real.append(cs.power.real)
+                    im.append(cs.power.imag)
+
+                else:
+                    print('skipped')
+                    pass
+                #print(cs.n)
+
+              #  real.append(cs.power.real)
+              #  im.append(cs.power.imag)
+
+
+
+
+            sem_real=[]
+            sem_im=[]
+
+            mean_real=[]
+            mean_im=[]
+
+            for i in range(len(real[0])):
+
+                #mean power per fourier frequency
+
+                mean_r = np.array(np.mean([arr[i] for arr in real]))
+               # print(mean_r)
+                mean_i=np.array(np.mean([ip[i] for ip in im]))
+
+                mean_real.append(mean_r)
+                mean_im.append(mean_i)
+
+
+
+                sem_i=np.std([ip[i] for ip in im]) / np.sqrt((np.size(im[0])))
+                sem_im.append(sem_i)
+
+                sem_r=np.std([r[i] for r in real]) / np.sqrt((np.size(real[0])))
+                sem_real.append(sem_r)
+
+
+
+            av_power_norm_array=[]
+            av_power_im_norm_array=[]
+            sem_r_array=[]
+            sem_im_array=[]
+
+
+        #    index_freq=list(locate(cs.freq, lambda x: fmin < x < fmax))  #energy cut just like before
+        #    print(index_freq)
+        #   # print(len(mean_real))
+        #    real_power_selected=mean_r[index_freq]
+        #    print(len(real_power_selected))
+        #    im_power_selected=mean_im[index_freq]
+        #    
+        #    sem_r_selected=sem_real[index_freq]
+        #    sem_im_selectec=sem_im[index_freq]
+
+            #real power 
+
+            norm_d = {'real_power': mean_real, 'all_fourier_freq': np.array(cs.freq), 'real_sem': sem_real, 'im_sem': sem_im} #total pwr and freq in dataset
+            df_norm = pd.DataFrame(data=norm_d)
+            selected_rows_norm = df_norm[(df_norm['all_fourier_freq'] >= fmin) & (df_norm['all_fourier_freq'] <= fmax)] #selecting freq range
+
+            av_power_norm_notmean=selected_rows_norm['real_power']
+            av_power_norm=selected_rows_norm['real_power'].mean() #calculating mean pwr between the fmin and fmax fourier range
+            print('Real mean power {}'.format(av_power_norm))
+            av_power_norm_array.append(av_power_norm_notmean)
+       #     
+       #     
+       #     #im
+            norm_d_im = {'all_power_im': mean_im, 'all_fourier_freq': np.array(cs.freq)} #total pwr and freq in dataset
+            df_norm_im = pd.DataFrame(data=norm_d_im)
+            selected_rows_norm_im = df_norm_im[(df_norm_im['all_fourier_freq'] >= fmin) & (df_norm_im['all_fourier_freq'] <= fmax)] #selecting freq range
+            av_power_norm_im=selected_rows_norm_im['all_power_im'].mean() #calculating mean pwr
+            av_power_norm_im_notmean=selected_rows_norm_im['all_power_im']
+            av_power_im_norm_array.append(av_power_norm_im_notmean)
+
+            print('Im mean power {}'.format(av_power_norm_im))
+
+
+            sem_r_selected=selected_rows_norm['real_sem']
+            sem_i_selected=selected_rows_norm['im_sem']
+       #     
+            sem_r_array.append(sem_r_selected)
+            sem_im_array.append(sem_i_selected)
+       #     
+            real_quad=np.sqrt(np.sum(i*i for i in sem_r_selected))
+            im_quad=np.sqrt(np.sum(k*k for k in sem_i_selected))
+            #print(real_quad)
+           # print(im_quad)
+
+            #print(len(np.array(av_power_norm_notmean)))
+            frac_rms_err=(real_quad)/(len(np.array(av_power_norm_notmean)))
+            phase_err=(im_quad)/len(np.array(av_power_norm_notmean))
+            frac_rms.append(av_power_norm)
+            phase.append(av_power_norm_im)
+            phase_err_arr.append(phase_err)
+            frac_rms_err_arr.append(frac_rms_err)
+            print(frac_rms_err)
+            print(phase_err)
+            #print(av_power_norm_array)
+            #print(frac_rms_err)
+            
+            frac_explode_err=[g*500 for g in frac_rms_err_arr]
+            
+
+
+    plt.figure()
+    plt.plot(av_mod,frac_rms,'.')
+    #plt.errorbar(av_mod,frac_rms,yerr=frac_explode_err)
+    plt.errorbar(av_mod,frac_rms,yerr=frac_rms_err_arr)
+    plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def frac_rms_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length,fmin,fmax):
+    
+    GTI=list(np.loadtxt(str(gti)))
+    
+    with fits.open(str(det12)) as hdu:
+
+        data_main=hdu[1].data  #reading in the file we will use the main data of (ie stokes, PI channel etc)
+        #print('Initial number of data {}'.format(len(data_main)))
+    with fits.open(str(det3)) as hdu1:
+        data_ref=hdu1[1].data  #reading in the file we will use the main
+        data_header=hdu1[1].header #reading in the file we will use the header of (the header data we need here is the same for all raw fits so any will do)
+        
+        
+        
+        
+
+        #indexing on energy and r
+        r_sqrd_1=abs((data_main.field('X')-x_0)**2-(data_main.field('Y')-y_0)**2)    #r cut just like before
+        r_sqrd_3=abs((data_ref.field('X')-x_0)**2-(data_ref.field('Y')-y_0)**2)
+        r_0=30.769326
+        index_r_1=[u<r_0 for u in r_sqrd_1]
+        index_r_3=[r3<r_0 for r3 in r_sqrd_3]
+        
+        data_main=data_main[index_r_1]
+        data_ref=data_ref[index_r_3]
+       
+
+
+        index_energy_1=list(locate(data_main['PI'], lambda x: Pmin < x < Pmax))  #energy cut just like before
+        index_energy_3=list(locate(data_ref['PI'], lambda x: Pmin < x < Pmax))  #energy cut just like before
+        
+        
+        
+        
+        
+        data_main_total_obs=data_main[index_energy_1]
+        data_ref_total_obs=data_ref[index_energy_3]    #useable photons (before gtis) to index over 
+        #-----------------------------------------------------------------------------cleaning complete
+
+        
+        #Defining fits header info
+        
+        TSTART=data_header['TSTART']
+        TSTOP=data_header['TSTOP']
+        MJDREFF=data_header['MJDREFF']   
+        MJDREFI=data_header['MJDREFI']
+        MJD_ref_day=MJDREFF+MJDREFI
+        curve_duration=TSTOP-TSTART
+#------------------------------------------------------------------------------------- This bit will always stay the same!
+
+        
+        #making time list based on length of bin to index on
+
+        time_bin_number=int((TSTOP-TSTART)//seg_length)  #needs to be an integer so round down to 'remove' the short timebin before its made
+        #print(time_bin_number)
+        #time_bin_number=2**18
+        time_space=np.linspace(TSTART,TSTOP,time_bin_number)
+        seg_time_list=[(time_space[w-1],time_space[w]) for w in range(len(time_space))] 
+        seg_time_list.pop(0)  
+        #print((seg_time_list))
+        
+        #testing the time intervals on GTI values
+        
+        gti_segs=[]
+        for time_value in seg_time_list:
+            
+            time_min_val=time_value[0]
+            time_max_val=time_value[1]
+            #print(time_min_val)
+            #print(time_max_val)
+            for j in GTI:
+                #print(j[0])
+                #print(j[1])
+                if time_min_val>j[0] and time_max_val<j[1]:
+                    gti_segs.append(time_value)
+
+        
+        
+        
+        
+        
+        real=[]
+        im=[]
+
+        #print(len(gti_segs))   
+        for good_seg in gti_segs:
+             
+            time_min=good_seg[0]
+            time_max=good_seg[1]
+
+            time_index_1=[time_min<photon_time_1<time_max for photon_time_1 in data_main_total_obs['TIME']]
+            time_index_3=[time_min<photon_time_3<time_max for photon_time_3 in data_ref_total_obs['TIME']]
+            #print(len(data_main))
+
+            data_main_time_bin=data_main_total_obs[time_index_1]
+            data_ref_time_bin=data_ref_total_obs[time_index_3]
+
+            
+            
+           #making lightcurves binned over mod angle (also time)
+        
+        
+            lc_12=Lightcurve.make_lightcurve(data_main_time_bin['TIME'],dt=bin_length,tseg=time_max-time_min,tstart=time_min)#,gti=GTI) 
+            lc_3=Lightcurve.make_lightcurve(data_ref_time_bin['TIME'],dt=bin_length,tseg=time_max-time_min,tstart=time_min)#),gti=GTI)
+            
+            
+            
+        
+
+            
+            cs=Crossspectrum.from_lightcurve(lc_12,lc_3,norm='frac') #making averagd cross spec
+         
+            #print(cs.n)
+            
+            real.append(cs.power.real)
+            im.append(cs.power.imag)
+            
+            
+        
+            
+        sem_real=[]
+        sem_im=[]
+        
+        mean_real=[]
+        mean_im=[]
+        
+        for i in range(len(real[0])):
+        
+            #mean power per fourier frequency
+            
+            mean_r = np.array(np.mean([arr[i] for arr in real]))
+           # print(mean_r)
+            mean_i=np.array(np.mean([ip[i] for ip in im]))
+        
+            mean_real.append(mean_r)
+            mean_im.append(mean_i)
+        
+            
+        
+            sem_i=np.std([ip[i] for ip in im]) / np.sqrt((np.size(im[0])))
+            sem_im.append(sem_i)
+            
+            sem_r=np.std([r[i] for r in real]) / np.sqrt((np.size(real[0])))
+            sem_real.append(sem_r)
+            
+        
+        
+        av_power_norm_array=[]
+        av_power_im_norm_array=[]
+        sem_r_array=[]
+        sem_im_array=[]
+        
+         
+    #    index_freq=list(locate(cs.freq, lambda x: fmin < x < fmax))  #energy cut just like before
+    #    print(index_freq)
+    #   # print(len(mean_real))
+    #    real_power_selected=mean_r[index_freq]
+    #    print(len(real_power_selected))
+    #    im_power_selected=mean_im[index_freq]
+    #    
+    #    sem_r_selected=sem_real[index_freq]
+    #    sem_im_selectec=sem_im[index_freq]
+        
+        #real power 
+        
+        norm_d = {'real_power': mean_real, 'all_fourier_freq': np.array(cs.freq), 'real_sem': sem_real, 'im_sem': sem_im} #total pwr and freq in dataset
+        df_norm = pd.DataFrame(data=norm_d)
+        selected_rows_norm = df_norm[(df_norm['all_fourier_freq'] >= fmin) & (df_norm['all_fourier_freq'] <= fmax)] #selecting freq range
+        
+        av_power_norm_notmean=selected_rows_norm['real_power']
+        av_power_norm=selected_rows_norm['real_power'].mean() #calculating mean pwr between the fmin and fmax fourier range
+        print('Real mean power {}'.format(av_power_norm))
+        av_power_norm_array.append(av_power_norm_notmean)
+   #     
+   #     
+   #     #im
+        norm_d_im = {'all_power_im': mean_im, 'all_fourier_freq': np.array(cs.freq)} #total pwr and freq in dataset
+        df_norm_im = pd.DataFrame(data=norm_d_im)
+        selected_rows_norm_im = df_norm_im[(df_norm_im['all_fourier_freq'] >= fmin) & (df_norm_im['all_fourier_freq'] <= fmax)] #selecting freq range
+        av_power_norm_im=selected_rows_norm_im['all_power_im'].mean() #calculating mean pwr
+        av_power_norm_im_notmean=selected_rows_norm_im['all_power_im']
+        av_power_im_norm_array.append(av_power_norm_im_notmean)
+       
+        print('Im mean power {}'.format(av_power_norm_im))
+        
+        
+        sem_r_selected=selected_rows_norm['real_sem']
+        sem_i_selected=selected_rows_norm['im_sem']
+   #     
+        sem_r_array.append(sem_r_selected)
+        sem_im_array.append(sem_i_selected)
+   #     
+        real_quad=np.sqrt(np.sum(i*i for i in sem_r_selected))
+        im_quad=np.sqrt(np.sum(k*k for k in sem_i_selected))
+        #print(real_quad)
+       # print(im_quad)
+        
+        #print(len(np.array(av_power_norm_notmean)))
+        frac_rms_err=(real_quad)/(len(np.array(av_power_norm_notmean)))
+        phase_err=(im_quad)/len(np.array(av_power_norm_notmean))
+        print(frac_rms_err)
+        print(phase_err)
+        #print(av_power_norm_array)
+        #print(frac_rms_err)
+        
+        #print(av_power_im_norm_array)
+        #print(phase_err)
+        
+
+        
+        
+        
+        
+        
+        
+    
+
+            
+            
+       # plt.figure()
+       # plt.xscale('log')
+       # plt.yscale('log')
+       # plt.plot(cs.freq, mean_real*cs.freq)
+       # plt.errorbar(cs.freq,mean_real*cs.freq,yerr=sem_real)
+        #plt.xlim(0.001, max(cs.freq))
+        #plt.ylim(-0.5,0.5)
+        #plt.show()
+       # lc12all=Lightcurve.make_lightcurve(data_main_total_obs.field('TIME'),bin_length,gti=GTI)  
+       # lc3all=Lightcurve.make_lightcurve(data_ref_total_obs.field('TIME'),bin_length,gti=GTI)
+       # cs=AveragedCrossspectrum.from_lightcurve(lc12all,lc3all,seg_length,norm='frac')
+        
+       # plt.plot(cs.freq,cs.power.real*cs.freq,color='red')
+       # plt.show()
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def cleaner(filename,Pmin,Pmax,source_name_num):
@@ -71,10 +621,7 @@ def concatenate_fits_files(file1, file2, output_file):
 
 
 
-def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length):
-    
-    mega_real=[]
-    mega_im=[]
+def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length): #correct for large number of fourier frequencies being averaged over
     
     GTI=list(np.loadtxt(str(gti)))
     
@@ -90,10 +637,7 @@ def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length):
        
         
 
-#indexing on energy and r
-    
-    
-    
+        #indexing on energy and r
         r_sqrd_1=abs((data_main.field('X')-x_0)**2-(data_main.field('Y')-y_0)**2)    #r cut just like before
         r_sqrd_3=abs((data_ref.field('X')-x_0)**2-(data_ref.field('Y')-y_0)**2)
         r_0=30.769326
@@ -173,15 +717,7 @@ def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length):
 
             data_main_time_bin=data_main_total_obs[time_index_1]
             data_ref_time_bin=data_ref_total_obs[time_index_3]
-
-
-
-            #making lcs over all mod angles before we index over the
-            
-            
-       
-           #making lightcurves binned over mod angle (also time)
-        
+             
         
             lc_12=Lightcurve.make_lightcurve(data_main_time_bin['TIME'],dt=bin_length,tseg=time_max-time_min,tstart=time_min)#,gti=GTI) 
             lc_3=Lightcurve.make_lightcurve(data_ref_time_bin['TIME'],dt=bin_length,tseg=time_max-time_min,tstart=time_min)#),gti=GTI)
@@ -193,7 +729,7 @@ def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length):
             
             cs=Crossspectrum.from_lightcurve(lc_12,lc_3,norm='frac') #making averagd cross spec
          
-
+            print(cs.n)
             
             real.append(cs.power.real)
             im.append(cs.power.imag)
@@ -209,13 +745,16 @@ def averaged_cross_spectrum_err(det12,det3,gti,Pmin,Pmax,bin_length,seg_length):
         
         for i in range(len(real[0])):
         
+            #mean power per fourier frequency
+            
             mean_r = np.mean([arr[i] for arr in real])
             mean_i=np.mean([ip[i] for ip in im])
         
             mean_real.append(mean_r)
             mean_im.append(mean_i)
         
-        #Standard error on the average imaginary power
+            
+        
             sem_i=np.std([ip[i] for ip in im]) / np.sqrt((np.size(im)))
             sem_im.append(sem_i)
             
@@ -518,14 +1057,19 @@ def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax,clean):
 
             lightcurve_12=Lightcurve.make_lightcurve(TIME,dt=bin_length,gti=GTI)
             lightcurve_12.apply_gtis()
-            print('lc')
+            print(lightcurve_12.counts)
 
             lightcurve_3=Lightcurve.make_lightcurve(TIME_3,dt=bin_length,gti=GTI)
             lightcurve_3.apply_gtis()
             print('lc_3')
-            
-            
-
+            plt.figure()
+            plt.plot(lightcurve_12.time,lightcurve_12.counts)
+            plt.title('lightcurve_12')
+            plt.show()
+            plt.figure()
+            plt.plot(lightcurve_3.time,lightcurve_3.counts)
+            plt.title('lightcurve_3')
+            plt.show()
             #Cross spec 
 
             avg_cs = AveragedCrossspectrum.from_lightcurve(lightcurve_12,lightcurve_3,seg_length,norm='frac')
@@ -550,6 +1094,10 @@ def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax,clean):
                 ax1.spines[axis].set_linewidth(1.5)
                 plt.show()
 
+                
+                
+                
+            avg_cs.write('/home/c2032014/PhD/4U1820303/cs_1.fits')
 
             
 def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3,gti):
@@ -603,8 +1151,8 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
             #Lightcurves for norm
 
             lightcurve_12=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
-            lc_no_gti=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART)
-            print(lc_no_gti.n)
+            #lc_no_gti=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART)
+            #print(lc_no_gti.n)
             lc_gti=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
             lc_gti.apply_gtis()
             print(lc_gti.n)
@@ -616,7 +1164,7 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
             #Cross spec for norm
 
             avg_cs = AveragedCrossspectrum.from_lightcurve(lightcurve_12,lightcurve_3,seg_length,norm='frac')
-               
+            print(avg_cs.n)   
             
      
             norm_power_real=avg_cs.power.real  #cross spec properties
@@ -664,10 +1212,6 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
              
 
 
-    
-    
-    
-    
     
     
             #abs power for norm
@@ -943,7 +1487,7 @@ def results(source_name,mod_bin_number,fmin,fmax,bin_length,seg_length):
 
     normalisation_factor=np.loadtxt('Results/norm_cs_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
 
-    norm_factor_list=[np.sqrt(1/(normalisation_factor**2))]*len(av_mod)
+    norm_factor_list=[np.sqrt(1/(normalisation_factor**2))*(fmax-fmin)]*len(av_mod)
     #123each
 #Results/cs_ith_av_real'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.t
     each_real=np.loadtxt('Results/cs_ith_av_real_'+str(source_name)+'_'+str(mod_bin_number)+'_bins_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt')
@@ -997,7 +1541,7 @@ def results(source_name,mod_bin_number,fmin,fmax,bin_length,seg_length):
     frac_norm=newG_real*normalisation_factor
     pl.plot(av_mod,frac_norm,'.')
     pl.plot(av_mod,norm_factor_list)
-    pl.errorbar(av_mod,newG_real*normalisation_factor,yerr=newG_err_real,label='G_real')
+   # pl.errorbar(av_mod,newG_real*normalisation_factor,'.',yerr=newG_err_real,label='G_real')
     pl.title('Fractional rms')
     pl.xlabel('Modulation angle (radians)')
     pl.ylabel('Fractional rms')                         
