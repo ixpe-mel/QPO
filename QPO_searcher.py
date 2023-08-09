@@ -27,8 +27,10 @@ import matplotlib.gridspec as gridspec
 
 #Constants
 x_0= 291.41708
-y_0=286.77622
+y_0=286.77622 #cyg constants  
 r_0=30.769326
+
+
 E_lo=2
 E_hi=8
 Pmin=((375/15)*E_lo)+1
@@ -309,24 +311,7 @@ def frac_rms_err_modbins(det12,det3,gti,Pmin,Pmax,bin_length,seg_length,fmin,fma
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
 
 
 
@@ -933,12 +918,17 @@ def powerspectrum(data_file,gti,bin_length,seg_length):
         lightcurve_12=Lightcurve.make_lightcurve(TIME,dt=bin_length,gti=GTI)
         lightcurve_12.apply_gtis()
 
-        ps=Powerspectrum.from_lightcurve(lightcurve_12,seg_length)
+        ps=AveragedPowerspectrum.from_lightcurve(lightcurve_12,seg_length)
+        
+        ps_err=ps.power_err
+        print(ps_err)
 
         fig, ax1 = plt.subplots(1,1,figsize=(9,6))
                 #ax1.plot(cs.freq, cs.power, color='blue',label='no log rebin')
         ax1.plot(ps.freq, ps.power.real, color='green')
-                #ax1.plot(avg_ps_log.freq, avg_ps_log.power, color='red',label='log rebin')
+        ax1.errorbar(ps.freq, ps.power.real, yerr=ps.power_err)        
+            
+            #ax1.plot(avg_ps_log.freq, avg_ps_log.power, color='red',label='log rebin')
         ax1.set_xlabel("Frequency (Hz)")
         ax1.set_title('Power spec')
         ax1.set_ylabel("Real Power")
@@ -983,7 +973,7 @@ def cleaner_and_mod_angle_selector(filename,filename_eff,source_name_datanumber,
         index_energy=list(locate(data.field('PI'), lambda x: Pmin < x < Pmax))  #energy cut just like before
         data=data[index_energy]
         eff_mod_angle=eff_mod_angle[index_energy]
-
+        print(len(data))
 
         #Modulation Angle List
         mod_min_global=np.radians(-90)
@@ -1000,25 +990,26 @@ def cleaner_and_mod_angle_selector(filename,filename_eff,source_name_datanumber,
             mod_min=i[0] #defining lhs bin edge
             mod_max=i[1] #defining rhs bin edge
             index_mod_angle=[mod_min<=k<=mod_max for k in eff_mod_angle] #define the index over mod angle
-            data_bin=data[index_mod_angle] #selecting/indexing the photons that meet the criteria of this mod angle range             
+            data_bin=data[index_mod_angle] #selecting/indexing the photons that meet the criteria of this mod angle range
+            print(len(data_bin))
             #save cleaned and mod selected fits file
             fits.writeto('Lightcurves/lc_'+str(source_name_datanumber)+'_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_.fits',data_bin,overwrite=True)
             
             
 
 #make a cross spectrum            
-def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax,clean):
+def crossspectrum(file12,file3,name,gti,bin_length,seg_length,Pmin,Pmax,clean):
     
     GTI=list(np.loadtxt(str(gti)))
     
     with fits.open(str(file12)) as hdu:
             data_12=hdu[1].data  #reading in DU1+DU2
-            print(data_12[0])
+            #print(data_12[0])
     
     with fits.open(str(file3)) as hdu2:
             #data_header=hdu2[1].header #reading in header 
             data_3=hdu2[1].data #reading in DU3
-            print(data_3[0])
+            #print(data_3[0])
             
 
             #TSTART=data_header['TSTART']
@@ -1071,15 +1062,20 @@ def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax,clean):
             plt.title('lightcurve_3')
             plt.show()
             #Cross spec 
-
+            mean_arr=[]
             avg_cs = AveragedCrossspectrum.from_lightcurve(lightcurve_12,lightcurve_3,seg_length,norm='frac')
-            avg_cs=avg_cs.rebin_log(f=0.1)
+            #avg_cs=avg_cs.rebin_log(f=0.1)
+            real=avg_cs.power.real
+            avg_cs_mean=avg_cs.power.real.mean()
+            mean_arr.append(avg_cs_mean)
+            avg_cs_err=avg_cs.power_err
 
            #Plotting the real part against fourier frequency
 
             fig, ax1 = plt.subplots(1,1,figsize=(9,6))
                 #ax1.plot(cs.freq, cs.power, color='blue',label='no log rebin')
             ax1.plot(avg_cs.freq, avg_cs.power.real*avg_cs.freq,'.', color='green')
+            ax1.errorbar(avg_cs.freq,avg_cs.power.real*avg_cs.freq,yerr=avg_cs_err*avg_cs.freq)
                 #ax1.plot(avg_ps_log.freq, avg_ps_log.power, color='red',label='log rebin')
             ax1.set_xlabel("Frequency (Hz)")
             ax1.set_title('Cross spec')
@@ -1096,8 +1092,10 @@ def crossspectrum(file12,file3,gti,bin_length,seg_length,Pmin,Pmax,clean):
 
                 
                 
-                
-            avg_cs.write('/home/c2032014/PhD/4U1820303/cs_1.fits')
+         #   np.savetxt('/home/c2032014/PhD/Results/'+str(name)+'_mean.txt',mean_arr)
+         #   np.savetxt('/home/c2032014/PhD/Results/'+str(name)+'_real.txt',real)
+         #   np.savetxt('/home/c2032014/PhD/Results/'+str(name)+'_fourier_freq.txt',avg_cs.freq)
+            #avg_cs.write('/home/c2032014/PhD/Crossspectra/'+str(name)+'crossspec.txt')
 
             
 def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,norm12,norm3,gti):
@@ -1153,18 +1151,19 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
             lightcurve_12=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
             #lc_no_gti=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART)
             #print(lc_no_gti.n)
-            lc_gti=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
-            lc_gti.apply_gtis()
-            print(lc_gti.n)
+            #lc_gti=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
+            #lc_gti.apply_gtis()
+            #print(lc_gti.n)
             lightcurve_12.apply_gtis()
-
+            
+            
             lightcurve_3=Lightcurve.make_lightcurve(TIME_3,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
             lightcurve_3.apply_gtis()
 
             #Cross spec for norm
 
             avg_cs = AveragedCrossspectrum.from_lightcurve(lightcurve_12,lightcurve_3,seg_length,norm='frac')
-            print(avg_cs.n)   
+            #print(avg_cs.n)   
             
      
             norm_power_real=avg_cs.power.real  #cross spec properties
@@ -1235,7 +1234,7 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
 
             #calculating normalisation constant
             
-            norm_factor=(np.sqrt((fmax-fmin))/np.sqrt(av_power_norm))
+            norm_factor=(np.sqrt((fmax-fmin))/np.sqrt(av_power_norm_array))
             norm_factor_array.append(norm_factor) 
             np.savetxt('Results/norm_cs_'+str(source_name)+'_freqs_'+str(fmin)+'_'+str(fmax)+'_'+str(bin_length)+'_'+str(seg_length)+'.txt',norm_factor_array)
 
@@ -1260,13 +1259,13 @@ def G_norm(source_name,bin_length,seg_length,Pmin,Pmax,fmin,fmax,mod_bin_number,
         print(mod_max)
      
         for file_12 in glob.iglob('Lightcurves/lc_'+str(source_name)+'_12_'+str(Pmin)+'_'+str(Pmax)+'_'+str(mod_min)+'_'+str(mod_max)+'_'+'.fits'): #lc file name  
-            print(file_12)
+            #print(file_12)
             with fits.open(file_12) as hdu1:
                 data_cut=hdu1[1].data  #reading in each mod angle selected file
                 TIME=data_cut['TIME']
                 
                 #making subject lightcurve
-                lc=Lightcurve.make_lightcurve(TIME,dt=bin_length,tseg=curve_duration,tstart=TSTART,gti=GTI)
+                lc=Lightcurve.make_lightcurve(TIME,dt=bin_length,tstart=TSTART,gti=GTI)
                 lc.apply_gtis()
                
                 #making averagd cross spectrum
